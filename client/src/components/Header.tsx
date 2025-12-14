@@ -5,6 +5,7 @@ interface HeaderProps {
   address: string | null;
   isConnected: boolean;
   isConnecting: boolean;
+  userUsdcBalance?: bigint;
   onConnect: () => void;
   onDisconnect: () => void;
 }
@@ -13,6 +14,7 @@ export function Header({
   address,
   isConnected,
   isConnecting,
+  userUsdcBalance,
   onConnect,
   onDisconnect,
 }: HeaderProps) {
@@ -33,6 +35,7 @@ export function Header({
           address={address}
           isConnected={isConnected}
           isConnecting={isConnecting}
+          userUsdcBalance={userUsdcBalance}
           onConnect={onConnect}
           onDisconnect={onDisconnect}
         />

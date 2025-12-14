@@ -4,6 +4,7 @@ import { ClaimButton } from "@/components/ClaimButton";
 import { UserStats } from "@/components/UserStats";
 import { GlobalStats } from "@/components/GlobalStats";
 import { NetworkAlert } from "@/components/NetworkAlert";
+import { Footer } from "@/components/Footer";
 import { useWallet } from "@/hooks/useWallet";
 import { useToast } from "@/hooks/use-toast";
 import { useEffect } from "react";
@@ -20,6 +21,7 @@ export default function Faucet() {
     isClaiming,
     claimError,
     faucetBalance,
+    userUsdcBalance,
     userTotalClaimed,
     timeUntilNextClaim,
     totalDistributed,
@@ -55,16 +57,17 @@ export default function Faucet() {
   const showNetworkAlert = isConnected && !isCorrectNetwork;
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background flex flex-col">
       <Header
         address={address}
         isConnected={isConnected}
         isConnecting={isConnecting}
+        userUsdcBalance={userUsdcBalance}
         onConnect={connect}
         onDisconnect={disconnect}
       />
 
-      <main className="max-w-4xl mx-auto px-4 py-8">
+      <main className="flex-1 max-w-4xl mx-auto px-4 py-8 w-full">
         {showNetworkAlert && (
           <div className="mb-6">
             <NetworkAlert isVisible={true} onSwitchNetwork={switchNetwork} />
@@ -87,14 +90,14 @@ export default function Faucet() {
             )}
           </div>
 
-          <FaucetBalance balance={faucetBalance} isLoading={isLoading} />
+          <FaucetBalance balance={faucetBalance} isLoading={isLoading && isConnected && isCorrectNetwork} />
 
           <ClaimButton
             isConnected={isConnected}
             isCorrectNetwork={isCorrectNetwork}
             isClaiming={isClaiming}
             timeUntilNextClaim={timeUntilNextClaim}
-            faucetEmpty={faucetEmpty}
+            faucetEmpty={faucetEmpty && isConnected && isCorrectNetwork}
             onClaim={handleClaim}
             onSwitchNetwork={switchNetwork}
           />
@@ -109,26 +112,13 @@ export default function Faucet() {
             <GlobalStats
               totalDistributed={totalDistributed}
               totalClaims={totalClaims}
-              isLoading={isLoading}
+              isLoading={isLoading && isConnected && isCorrectNetwork}
             />
-          </div>
-
-          <div className="text-center text-sm text-muted-foreground pt-6 border-t border-border">
-            <p>
-              All data is read directly from the Arc blockchain.{" "}
-              <a
-                href={`https://explorer-testnet.arcblockchain.io/address/0x0dCA4156d4b138EbA6578B2e771297D80637B840`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-primary hover:underline"
-                data-testid="link-contract"
-              >
-                View Contract
-              </a>
-            </p>
           </div>
         </div>
       </main>
+
+      <Footer />
     </div>
   );
 }

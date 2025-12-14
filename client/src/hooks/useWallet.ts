@@ -3,9 +3,11 @@ import { BrowserProvider, Contract } from "ethers";
 import {
   ARC_TESTNET,
   FAUCET_CONTRACT_ADDRESS,
+  USDC_TOKEN_ADDRESS,
   FAUCET_ABI,
-  USDC_ABI,
+  ERC20_ABI,
   switchToArcTestnet,
+  isOnArcTestnet,
 } from "@/lib/blockchain";
 
 interface WalletState {
@@ -13,12 +15,11 @@ interface WalletState {
   isConnected: boolean;
   isCorrectNetwork: boolean;
   isConnecting: boolean;
-  provider: BrowserProvider | null;
-  faucetContract: Contract | null;
 }
 
 interface FaucetData {
   faucetBalance: bigint;
+  userUsdcBalance: bigint;
   userTotalClaimed: bigint;
   timeUntilNextClaim: number;
   totalDistributed: bigint;
@@ -31,12 +32,11 @@ export function useWallet() {
     isConnected: false,
     isCorrectNetwork: false,
     isConnecting: false,
-    provider: null,
-    faucetContract: null,
   });
 
   const [faucetData, setFaucetData] = useState<FaucetData>({
     faucetBalance: BigInt(0),
+    userUsdcBalance: BigInt(0),
     userTotalClaimed: BigInt(0),
     timeUntilNextClaim: 0,
     totalDistributed: BigInt(0),
@@ -47,39 +47,54 @@ export function useWallet() {
   const [isClaiming, setIsClaiming] = useState(false);
   const [claimError, setClaimError] = useState<string | null>(null);
 
-  const checkNetwork = useCallback(async () => {
-    if (!window.ethereum) return false;
-    const chainId = await window.ethereum.request({ method: "eth_chainId" });
-    return chainId === ARC_TESTNET.chainId;
+  const checkNetwork = useCallback(async (): Promise<boolean> => {
+    return await isOnArcTestnet();
   }, []);
 
   const refreshData = useCallback(async () => {
-    if (!wallet.provider || !wallet.address) return;
+    if (!window.ethereum || !wallet.address) return;
+
+    const isCorrect = await checkNetwork();
+    if (!isCorrect) {
+      setWallet((prev) => ({ ...prev, isCorrectNetwork: false }));
+      return;
+    }
+
     setIsLoading(true);
 
     try {
+      const provider = new BrowserProvider(window.ethereum);
+
       const faucetContract = new Contract(
         FAUCET_CONTRACT_ADDRESS,
         FAUCET_ABI,
-        wallet.provider
+        provider
       );
       const usdcContract = new Contract(
-        FAUCET_CONTRACT_ADDRESS,
-        USDC_ABI,
-        wallet.provider
+        USDC_TOKEN_ADDRESS,
+        ERC20_ABI,
+        provider
       );
 
-      const [balance, userClaimed, timeUntil, totalDist, claims] =
-        await Promise.all([
-          usdcContract.balanceOf(FAUCET_CONTRACT_ADDRESS),
-          faucetContract.totalClaimedByUser(wallet.address),
-          faucetContract.timeUntilNextClaim(wallet.address),
-          faucetContract.totalUSDCDistributed(),
-          faucetContract.totalClaims(),
-        ]);
+      const [
+        faucetBalance,
+        userBalance,
+        userClaimed,
+        timeUntil,
+        totalDist,
+        claims,
+      ] = await Promise.all([
+        usdcContract.balanceOf(FAUCET_CONTRACT_ADDRESS),
+        usdcContract.balanceOf(wallet.address),
+        faucetContract.totalClaimedByUser(wallet.address),
+        faucetContract.timeUntilNextClaim(wallet.address),
+        faucetContract.totalUSDCDistributed(),
+        faucetContract.totalClaims(),
+      ]);
 
       setFaucetData({
-        faucetBalance: balance,
+        faucetBalance,
+        userUsdcBalance: userBalance,
         userTotalClaimed: userClaimed,
         timeUntilNextClaim: Number(timeUntil),
         totalDistributed: totalDist,
@@ -90,7 +105,7 @@ export function useWallet() {
     } finally {
       setIsLoading(false);
     }
-  }, [wallet.provider, wallet.address]);
+  }, [wallet.address, checkNetwork]);
 
   const connect = useCallback(async () => {
     if (!window.ethereum) {
@@ -101,29 +116,30 @@ export function useWallet() {
     setWallet((prev) => ({ ...prev, isConnecting: true }));
 
     try {
-      const provider = new BrowserProvider(window.ethereum);
       const accounts = await window.ethereum.request({
         method: "eth_requestAccounts",
       });
 
-      const isCorrectNetwork = await checkNetwork();
-      if (!isCorrectNetwork) {
-        await switchToArcTestnet();
+      if (!accounts || accounts.length === 0) {
+        setWallet((prev) => ({ ...prev, isConnecting: false }));
+        return;
       }
 
-      const faucetContract = new Contract(
-        FAUCET_CONTRACT_ADDRESS,
-        FAUCET_ABI,
-        provider
-      );
+      let isCorrect = await checkNetwork();
+
+      if (!isCorrect) {
+        const switched = await switchToArcTestnet();
+        if (switched) {
+          await new Promise((resolve) => setTimeout(resolve, 500));
+          isCorrect = await checkNetwork();
+        }
+      }
 
       setWallet({
         address: accounts[0],
         isConnected: true,
-        isCorrectNetwork: await checkNetwork(),
+        isCorrectNetwork: isCorrect,
         isConnecting: false,
-        provider,
-        faucetContract,
       });
     } catch (error) {
       console.error("Error connecting wallet:", error);
@@ -137,11 +153,10 @@ export function useWallet() {
       isConnected: false,
       isCorrectNetwork: false,
       isConnecting: false,
-      provider: null,
-      faucetContract: null,
     });
     setFaucetData({
       faucetBalance: BigInt(0),
+      userUsdcBalance: BigInt(0),
       userTotalClaimed: BigInt(0),
       timeUntilNextClaim: 0,
       totalDistributed: BigInt(0),
@@ -150,12 +165,13 @@ export function useWallet() {
   }, []);
 
   const claim = useCallback(async () => {
-    if (!wallet.provider || !wallet.address) return;
+    if (!window.ethereum || !wallet.address) return;
     setIsClaiming(true);
     setClaimError(null);
 
     try {
-      const signer = await wallet.provider.getSigner();
+      const provider = new BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
       const faucetContract = new Contract(
         FAUCET_CONTRACT_ADDRESS,
         FAUCET_ABI,
@@ -172,25 +188,30 @@ export function useWallet() {
     } finally {
       setIsClaiming(false);
     }
-  }, [wallet.provider, wallet.address, refreshData]);
+  }, [wallet.address, refreshData]);
 
   const switchNetwork = useCallback(async () => {
-    const success = await switchToArcTestnet();
-    if (success) {
-      setWallet((prev) => ({ ...prev, isCorrectNetwork: true }));
+    const switched = await switchToArcTestnet();
+    if (switched) {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      const isCorrect = await checkNetwork();
+      setWallet((prev) => ({ ...prev, isCorrectNetwork: isCorrect }));
+      if (isCorrect && wallet.address) {
+        await refreshData();
+      }
     }
-  }, []);
+  }, [checkNetwork, wallet.address, refreshData]);
 
   useEffect(() => {
-    if (wallet.isConnected && wallet.isCorrectNetwork) {
+    if (wallet.isConnected && wallet.isCorrectNetwork && wallet.address) {
       refreshData();
     }
-  }, [wallet.isConnected, wallet.isCorrectNetwork, refreshData]);
+  }, [wallet.isConnected, wallet.isCorrectNetwork, wallet.address, refreshData]);
 
   useEffect(() => {
     if (!window.ethereum) return;
 
-    const handleAccountsChanged = (accounts: string[]) => {
+    const handleAccountsChanged = async (accounts: string[]) => {
       if (accounts.length === 0) {
         disconnect();
       } else {
@@ -201,6 +222,9 @@ export function useWallet() {
     const handleChainChanged = async () => {
       const isCorrect = await checkNetwork();
       setWallet((prev) => ({ ...prev, isCorrectNetwork: isCorrect }));
+      if (isCorrect && wallet.address) {
+        await refreshData();
+      }
     };
 
     window.ethereum.on("accountsChanged", handleAccountsChanged);
@@ -210,7 +234,7 @@ export function useWallet() {
       window.ethereum?.removeListener("accountsChanged", handleAccountsChanged);
       window.ethereum?.removeListener("chainChanged", handleChainChanged);
     };
-  }, [disconnect, checkNetwork]);
+  }, [disconnect, checkNetwork, wallet.address, refreshData]);
 
   return {
     ...wallet,
