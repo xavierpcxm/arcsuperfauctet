@@ -1,0 +1,204 @@
+I want to build an Arc Super Faucet, inspired by:
+https://easyfaucetarc.xyz/
+
+FIXED FAUCET CONTRACT (VERY IMPORTANT)
+
+The faucet vault contract address is FIXED and MUST be used as the source of truth:
+
+0x0dCA4156d4b138EbA6578B2e771297D80637B840
+
+
+This contract:
+
+Holds the USDC balance
+
+Distributes the funds
+
+Stores all user and global stats
+
+The frontend must ONLY READ DATA FROM THIS CONTRACT.
+
+FUNDAMENTAL RULE
+
+NO DATA MAY DEPEND ON FRONTEND STATE.
+
+No localStorage
+
+No backend
+
+No cached values
+
+No inferred calculations
+
+The Arc blockchain is the only source of truth.
+
+NETWORK & TOKEN
+
+Network: Arc Testnet
+
+Token: USDC (6 decimals)
+
+Claim amount: $500
+
+Cooldown: 1 claim per wallet every 24 hours
+
+BALANCE DISPLAY (CRITICAL)
+
+Read the faucet balance using:
+
+usdc.balanceOf(0x0dCA4156d4b138EbA6578B2e771297D80637B840)
+
+
+Convert from 6 decimals
+
+Display the value as $
+
+✅ Example:
+
+Onchain value: 2500000000
+
+Display on site: $2,500
+
+⚠️ Do NOT display “USDC”
+⚠️ Do NOT calculate balance offchain
+
+WALLET CONNECTION FLOW
+Before Wallet Connection
+
+Show message:
+
+“Connect wallet to enable claiming”
+
+Claim button must be disabled
+
+After Wallet Connection
+
+Enable all contract reads and display:
+
+Connected wallet address
+
+Available faucet balance: $X,XXX
+
+Claim amount: $500
+
+USER DATA (ONCHAIN)
+
+Read directly from the contract:
+
+Total claimed by this wallet
+
+totalClaimedByUser(userAddress)
+
+Display in $
+
+Cooldown remaining
+
+timeUntilNextClaim(userAddress)
+
+Display as countdown HH:MM:SS
+
+GLOBAL STATS (ONCHAIN – REAL TIME)
+
+Always visible:
+
+Total $ distributed
+
+totalUSDCDistributed()
+
+Total number of claims
+
+totalClaims()
+
+All values:
+
+Pulled directly from the Arc blockchain
+
+Refetched after every claim
+
+CLAIM LOGIC
+
+Read timeUntilNextClaim(userAddress)
+
+If value == 0:
+
+Enable button: “Claim $500”
+
+If value > 0:
+
+Disable button
+
+Show:
+
+“You can claim again in HH:MM:SS”
+
+Countdown must:
+
+Be derived from onchain timestamps
+
+Update every second
+
+Never rely on frontend memory
+
+UX STATES
+
+Wallet not connected → claim disabled
+
+Wrong network → prompt switch to Arc Testnet
+
+Faucet empty → show “Faucet empty”
+
+Claim success → re-read ALL values from contract:
+
+Faucet balance
+
+User total claimed
+
+Global distributed amount
+
+Total claims
+
+Cooldown timer
+
+TECH CONSTRAINTS
+
+Use ethers.js
+
+Read-only calls for all stats
+
+Send transaction only for claim()
+
+Contract address hardcoded (or env, but fixed)
+
+No backend
+
+No APIs
+
+No indexers
+
+DESIGN
+
+Minimal
+
+Dark mode
+
+Clear sections:
+
+Faucet Balance
+
+User Stats
+
+Global Stats
+
+Currency symbol: $
+
+FINAL RESULT
+
+A SuperFaucet where:
+
+The displayed balance is the real onchain balance
+
+All values are verifiable in the Arc explorer
+
+The frontend cannot lie or desync
+
+Users trust the system by design
